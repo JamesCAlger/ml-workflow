@@ -70,13 +70,14 @@ class LogTransform(BaseTransform):
         else:
             raise ValueError(f"Unknown handle_zeros method: {self.handle_zeros}")
         
-        # Replace original column with transformed values
+        # Add new column with transformed values (preserve original)
         new_column_name = f"{column_name}_log"
         df[new_column_name] = transformed_data
         
         print(f"Log transformation applied: '{column_name}' -> '{new_column_name}'")
         print(f"Original range: [{data.min():.2f}, {data.max():.2f}]")
         print(f"Transformed range: [{transformed_data.min():.2f}, {transformed_data.max():.2f}]")
+        print(f"Original column '{column_name}' preserved alongside '{new_column_name}'")
         
         return df
     

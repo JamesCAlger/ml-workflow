@@ -6,6 +6,10 @@ targets:
   nav_log:
     column: nav_log
     description: "Log-transformed NAV (Net Asset Value) amounts"
+  
+  nav_log_diff:
+    column: nav_log_diff
+    description: "Log-differenced NAV (Net Asset Value) amounts - changes in log NAV"
 
 covariates:
   base_set:
@@ -52,5 +56,11 @@ experiments:
   nav_extended_features:
     target: nav_log
     covariates: extended_set
+    model_type: lightgbm
+    quantiles: default
+    
+  nav_log_diff_baseline:
+    target: nav_log_diff
+    covariates: base_set
     model_type: lightgbm
     quantiles: default

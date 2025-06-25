@@ -22,6 +22,9 @@ preprocessing:
           params:
             add_constant: 1
             handle_zeros: "add_constant"
+        - name: first_difference
+          params:
+            groupby_column: "investment"
     
   age_settings:
     max_age: 48

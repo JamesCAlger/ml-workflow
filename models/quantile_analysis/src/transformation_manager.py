@@ -39,7 +39,11 @@ class TransformationManager:
             
             print(f"\nApplying transformations to column '{column_name}':")
             
-            for transform_spec in transforms:
+            # Track the current column name through the transformation chain
+            current_column = column_name
+            transformation_chain = []
+            
+            for i, transform_spec in enumerate(transforms):
                 transform_name = transform_spec['name']
                 transform_params = transform_spec.get('params', {})
                 
@@ -52,17 +56,41 @@ class TransformationManager:
                     print(f"Warning: Unknown transformation '{transform_name}', skipping")
                     continue
                 
-                # Apply transformation
-                df = transformer.fit_transform(df, column_name)
+                # Apply transformation to current column
+                df = transformer.fit_transform(df, current_column)
+                
+                # Determine the output column name
+                transform_suffix = transform_name.replace('_transform', '')
+                if i == 0:
+                    # First transformation: column_name -> column_name_suffix
+                    transformed_column = f"{column_name}_{transform_suffix}"
+                else:
+                    # Subsequent transformations: add suffix to existing name
+                    transformed_column = f"{current_column}_{transform_suffix}"
                 
                 # Store fitted transformer for inverse operations
-                transformed_column = f"{column_name}_{transform_name.replace('_transform', '')}"
-                
                 self.fitted_transformers[transformed_column] = transformer
-                self.column_mappings[column_name] = transformed_column
-                self.inverse_mappings[transformed_column] = column_name
+                transformation_chain.append({
+                    'transformer': transformer,
+                    'from_column': current_column,
+                    'to_column': transformed_column,
+                    'transform_name': transform_name
+                })
+                
+                # Update current column for next transformation in chain
+                current_column = transformed_column
                 
                 print(f"Stored transformer for inverse operations: {transformed_column} -> {column_name}")
+            
+            # Map original column to final transformed column
+            if transformation_chain:
+                final_column = transformation_chain[-1]['to_column']
+                self.column_mappings[column_name] = final_column
+                self.inverse_mappings[final_column] = column_name
+                
+                # Store the transformation chain for complex inverse operations
+                self.transformation_chains = getattr(self, 'transformation_chains', {})
+                self.transformation_chains[final_column] = transformation_chain
         
         return df
     
@@ -137,10 +165,20 @@ class TransformationManager:
             print("No transformations applied")
             return
         
-        for transformed_col, transformer in self.fitted_transformers.items():
-            original_col = self.inverse_mappings[transformed_col]
-            transform_type = transformer.__class__.__name__
-            print(f"  {original_col} -> {transformed_col} ({transform_type})")
+        # Show transformation chains if they exist
+        transformation_chains = getattr(self, 'transformation_chains', {})
+        if transformation_chains:
+            for final_col, chain in transformation_chains.items():
+                original_col = self.inverse_mappings[final_col]
+                chain_description = " -> ".join([step['to_column'] for step in chain])
+                transform_types = " -> ".join([step['transformer'].__class__.__name__ for step in chain])
+                print(f"  {original_col} -> {chain_description} ({transform_types})")
+        else:
+            # Fallback to simple display
+            for transformed_col, transformer in self.fitted_transformers.items():
+                original_col = self.inverse_mappings[transformed_col]
+                transform_type = transformer.__class__.__name__
+                print(f"  {original_col} -> {transformed_col} ({transform_type})")
         
         print(f"\nAutomatic Settings:")
         print(f"  - Auto reverse for evaluation: {self.auto_reverse_for_evaluation}")

@@ -51,6 +51,7 @@ class FirstDifference(BaseTransform):
         df = df.dropna(subset=[new_column_name])
         
         print(f"Applied first difference to '{column_name}' -> '{new_column_name}'")
+        print(f"Original column '{column_name}' preserved alongside '{new_column_name}'")
         print(f"Rows after transformation: {len(df)}")
         
         return df
