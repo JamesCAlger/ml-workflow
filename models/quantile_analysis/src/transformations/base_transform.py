@@ -21,7 +21,7 @@ class BaseTransform(ABC):
         pass
     
     @abstractmethod
-    def inverse_transform(self, values, original_column_name=None):
+    def inverse_transform(self, values, original_column_name=None, group_ids=None):
         """Reverse the transformation to get back to original scale"""
         pass
     
@@ -36,4 +36,17 @@ class BaseTransform(ABC):
     
     def get_params(self):
         """Get transformation parameters"""
-        return self.params 
+        return self.params
+    
+    def get_metadata(self):
+        """Get transformation metadata for intelligent handling
+        
+        Override this method in subclasses to provide specific metadata
+        """
+        return {
+            'complexity': 'simple',           # simple, complex, structural
+            'visualization_scale': 'original', # original, log, normalized, difference
+            'requires_groups': False,         # Does inverse need group info?
+            'output_interpretation': 'same', # same, rate_of_change, normalized
+            'suggested_formatter': 'currency' # currency, percentage, decimal, scientific
+        } 

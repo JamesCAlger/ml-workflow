@@ -1,9 +1,11 @@
 """
 Transformation Manager for handling forward and inverse transformations automatically.
 The user only needs to configure forward transformations in YAML.
+
+Enhanced with Registry Pattern for modular transformation loading.
 """
 import numpy as np
-from transformations import FirstDifference, LogTransform
+from transform_registry import get_registry, create_transform, list_transforms
 
 class TransformationManager:
     """Centralized manager for all data transformations with automatic inverse capability"""
@@ -16,6 +18,7 @@ class TransformationManager:
         self.inverse_mappings = {}  # transformed_column -> original_column
         self.auto_reverse_for_evaluation = True
         self.auto_reverse_for_visualization = True
+        self.registry = get_registry()  # Get the global registry
         
         # Parse configuration
         self._parse_config()
@@ -47,13 +50,14 @@ class TransformationManager:
                 transform_name = transform_spec['name']
                 transform_params = transform_spec.get('params', {})
                 
-                # Create and apply transformation
-                if transform_name == 'log_transform':
-                    transformer = LogTransform(**transform_params)
-                elif transform_name == 'first_difference':
-                    transformer = FirstDifference(**transform_params)
-                else:
-                    print(f"Warning: Unknown transformation '{transform_name}', skipping")
+                # Create transformation using registry pattern - NO HARDCODED CONDITIONALS!
+                try:
+                    transformer = create_transform(transform_name, **transform_params)
+                    print(f"✅ Created {transformer.__class__.__name__} with params: {transform_params}")
+                except ValueError as e:
+                    print(f"❌ Error creating transformation '{transform_name}': {e}")
+                    available = list_transforms()
+                    print(f"📋 Available transformations: {available}")
                     continue
                 
                 # Apply transformation to current column
