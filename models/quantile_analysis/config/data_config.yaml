@@ -1,0 +1,38 @@
+data_sources:
+  primary:
+    file_path: "data/Quarterly_Net_Positional_Data_Full_MR_SIMPLIFIED.xlsx"
+    sheet_name: "Sheet1"
+    date_column: "date"
+    
+preprocessing:
+  nav_transformations:
+    invert_sign: false
+    set_negative_to_zero: false
+    min_threshold: 1.0
+    
+  transformations:
+    column_transforms:
+      disbursement:
+        - name: log_transform
+          params:
+            add_constant: 1
+            handle_zeros: "add_constant"
+    
+  age_settings:
+    max_age: 48
+    groupby_column: "investment"
+    
+  train_test_split:
+    method: "temporal"  # or "random" or "stratified"
+    test_size: 0.2
+    
+  encoding:
+    strategy_column: "strategy"
+    method: "label_encoder"  # or "one_hot"
+
+  aggregation:
+    covariate_column: "strategy"  # Column to use for result aggregation and analysis
+
+filters:
+  remove_zero_disbursement: true
+  max_age_quarters: 48

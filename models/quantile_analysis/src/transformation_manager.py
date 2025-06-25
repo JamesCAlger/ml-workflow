@@ -1,0 +1,148 @@
+"""
+Transformation Manager for handling forward and inverse transformations automatically.
+The user only needs to configure forward transformations in YAML.
+"""
+import numpy as np
+from transformations import FirstDifference, LogTransform
+
+class TransformationManager:
+    """Centralized manager for all data transformations with automatic inverse capability"""
+    
+    def __init__(self, data_config):
+        """Initialize with data configuration"""
+        self.data_config = data_config
+        self.fitted_transformers = {}  # Store fitted transformer instances
+        self.column_mappings = {}  # original_column -> transformed_column
+        self.inverse_mappings = {}  # transformed_column -> original_column
+        self.auto_reverse_for_evaluation = True
+        self.auto_reverse_for_visualization = True
+        
+        # Parse configuration
+        self._parse_config()
+    
+    def _parse_config(self):
+        """Parse transformation configuration from data_config"""
+        transform_config = self.data_config.get('preprocessing', {}).get('transformations', {})
+        
+        # Set automatic reverse preferences (with smart defaults)
+        self.auto_reverse_for_evaluation = transform_config.get('auto_reverse_for_evaluation', True)
+        self.auto_reverse_for_visualization = transform_config.get('auto_reverse_for_visualization', True)
+    
+    def apply_transformations(self, df, transform_config):
+        """Apply configured transformations and store fitted transformers for inverse operations"""
+        column_transforms = transform_config.get('column_transforms', {})
+        
+        for column_name, transforms in column_transforms.items():
+            if column_name not in df.columns:
+                print(f"Warning: Column '{column_name}' not found in dataframe, skipping transformations")
+                continue
+            
+            print(f"\nApplying transformations to column '{column_name}':")
+            
+            for transform_spec in transforms:
+                transform_name = transform_spec['name']
+                transform_params = transform_spec.get('params', {})
+                
+                # Create and apply transformation
+                if transform_name == 'log_transform':
+                    transformer = LogTransform(**transform_params)
+                elif transform_name == 'first_difference':
+                    transformer = FirstDifference(**transform_params)
+                else:
+                    print(f"Warning: Unknown transformation '{transform_name}', skipping")
+                    continue
+                
+                # Apply transformation
+                df = transformer.fit_transform(df, column_name)
+                
+                # Store fitted transformer for inverse operations
+                transformed_column = f"{column_name}_{transform_name.replace('_transform', '')}"
+                
+                self.fitted_transformers[transformed_column] = transformer
+                self.column_mappings[column_name] = transformed_column
+                self.inverse_mappings[transformed_column] = column_name
+                
+                print(f"Stored transformer for inverse operations: {transformed_column} -> {column_name}")
+        
+        return df
+    
+    def can_inverse_transform(self, column_name):
+        """Check if inverse transformation is available for a column"""
+        return column_name in self.fitted_transformers
+    
+    def inverse_transform_predictions(self, predictions, target_column, group_ids=None):
+        """Automatically inverse transform predictions if possible
+        
+        Args:
+            predictions: Dictionary of quantile predictions or single prediction array
+            target_column: Name of target column to inverse transform
+            group_ids: Optional array of group identifiers for group-aware transformations
+        """
+        if not self.auto_reverse_for_evaluation:
+            return predictions
+            
+        if not self.can_inverse_transform(target_column):
+            print(f"No inverse transformation available for '{target_column}', returning original predictions")
+            return predictions
+        
+        transformer = self.fitted_transformers[target_column]
+        original_column = self.inverse_mappings[target_column]
+        
+        print(f"Applying inverse transformation: {target_column} -> {original_column}")
+        
+        # Apply standard inverse transformation
+        transformer_type = transformer.__class__.__name__
+        print(f"Applying standard inverse transformation for {transformer_type}")
+        
+        # Handle both single predictions and dictionary of quantile predictions
+        if isinstance(predictions, dict):
+            # Multiple quantiles
+            inverse_predictions = {}
+            for quantile, pred_values in predictions.items():
+                inverse_predictions[quantile] = transformer.inverse_transform(
+                    pred_values, original_column, group_ids=group_ids)
+            return inverse_predictions
+        else:
+            # Single prediction array
+            return transformer.inverse_transform(predictions, original_column, group_ids=group_ids)
+    
+    def get_visualization_scale(self, target_column):
+        """Get the appropriate column and scale for visualization"""
+        if not self.auto_reverse_for_visualization:
+            return target_column, 'transformed'
+        
+        if target_column in self.inverse_mappings:
+            original_column = self.inverse_mappings[target_column]
+            return original_column, 'original'
+        
+        return target_column, 'original'
+    
+    def get_target_info(self, target_column):
+        """Get information about target column transformations"""
+        return {
+            'transformed_column': target_column,
+            'original_column': self.inverse_mappings.get(target_column, target_column),
+            'has_inverse': self.can_inverse_transform(target_column),
+            'auto_reverse_evaluation': self.auto_reverse_for_evaluation,
+            'auto_reverse_visualization': self.auto_reverse_for_visualization
+        }
+    
+    def print_transformation_summary(self):
+        """Print summary of applied transformations"""
+        print("\n" + "="*60)
+        print("TRANSFORMATION SUMMARY")
+        print("="*60)
+        
+        if not self.fitted_transformers:
+            print("No transformations applied")
+            return
+        
+        for transformed_col, transformer in self.fitted_transformers.items():
+            original_col = self.inverse_mappings[transformed_col]
+            transform_type = transformer.__class__.__name__
+            print(f"  {original_col} -> {transformed_col} ({transform_type})")
+        
+        print(f"\nAutomatic Settings:")
+        print(f"  - Auto reverse for evaluation: {self.auto_reverse_for_evaluation}")
+        print(f"  - Auto reverse for visualization: {self.auto_reverse_for_visualization}")
+        print("="*60) 

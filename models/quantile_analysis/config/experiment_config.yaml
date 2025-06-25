@@ -1,0 +1,40 @@
+targets:
+  disbursement_log:
+    column: disbursement_log
+    description: "Log-transformed disbursement amounts"
+
+covariates:
+  base_set:
+    features: [age, strategy_encoded]
+    description: "Basic age and strategy features"
+  
+  extended_set:
+    features: [age, strategy_encoded, quarter, year, fund_size_log, vintage_year]
+    description: "Extended feature set with temporal and fund characteristics"
+  
+  interaction_set:
+    features: [age, strategy_encoded, age_strategy_interaction, age_squared, age_cubed]
+    description: "Features with polynomial and interaction terms"
+  
+  temporal_set:
+    features: [age, strategy_encoded, quarter, year, market_cycle, recession_flag]
+    description: "Features emphasizing temporal market conditions"
+
+experiments:
+  disbursement_baseline:
+    target: disbursement_log
+    covariates: base_set
+    model_type: lightgbm
+    quantiles: default
+    
+  disbursement_extended_features:
+    target: disbursement_log
+    covariates: extended_set
+    model_type: lightgbm
+    quantiles: default
+    
+  disbursement_xgboost_comparison:
+    target: disbursement_log
+    covariates: base_set
+    model_type: xgboost
+    quantiles: default
