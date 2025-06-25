@@ -1,0 +1,49 @@
+# MLflow Configuration
+mlflow:
+  # Tracking Server Configuration
+  tracking_uri: "http://localhost:5000"  # Local MLflow server
+  # tracking_uri: "sqlite:///mlflow.db"  # Alternative: local SQLite
+  # tracking_uri: "postgresql://user:pass@localhost/mlflow"  # Production: PostgreSQL
+  
+  # Experiment Organization
+  experiment_name: "quantile_analysis"
+  
+  # Auto-logging Configuration
+  auto_log:
+    lightgbm: true
+    xgboost: true
+    sklearn: true
+    
+  # Artifact Storage
+  artifacts:
+    location: "./mlruns"  # Local storage
+    # location: "s3://my-bucket/mlflow-artifacts"  # Production: S3
+    
+  # Model Registry
+  model_registry:
+    enabled: true
+    default_stage: "Staging"
+    
+  # Hyperparameter Tuning
+  hyperopt:
+    max_evals: 50
+    algorithm: "tpe"  # Tree-structured Parzen Estimator
+    timeout: 3600     # 1 hour timeout
+    
+  # Dashboard Configuration
+  dashboard:
+    host: "0.0.0.0"
+    port: 5000
+    
+# Integration Settings
+integration:
+  track_data_quality: true
+  track_feature_importance: true
+  track_model_artifacts: true
+  track_visualizations: true
+  
+# Performance Settings
+performance:
+  batch_logging: true
+  async_logging: false
+  log_level: "INFO" 

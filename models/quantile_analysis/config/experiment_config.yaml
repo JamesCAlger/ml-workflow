@@ -64,3 +64,22 @@ experiments:
     covariates: base_set
     model_type: lightgbm
     quantiles: default
+
+  # NEW XGBOOST EXPERIMENTS
+  nav_xgboost_baseline:
+    target: nav_log
+    covariates: base_set
+    model_type: xgboost
+    quantiles: default
+    
+  nav_xgboost_extended:
+    target: nav_log
+    covariates: extended_set
+    model_type: xgboost
+    quantiles: default
+    
+  nav_diff_xgboost:
+    target: nav_log_diff
+    covariates: base_set
+    model_type: xgboost
+    quantiles: default

@@ -74,6 +74,17 @@ class QuantileModelTrainer:
         """Train XGBoost quantile models"""
         print("Training XGBoost quantile models...")
         
+        # Clean data for XGBoost (remove NaN/inf values)
+        import pandas as pd
+        if isinstance(X_train, pd.DataFrame):
+            X_clean = X_train.replace([np.inf, -np.inf], np.nan).fillna(0)
+        else:
+            X_clean = np.nan_to_num(X_train, nan=0, posinf=0, neginf=0)
+        
+        y_clean = np.nan_to_num(y_train, nan=0, posinf=0, neginf=0)
+        
+        print(f"Data cleaning complete. Shape: {X_clean.shape}")
+        
         # Get XGBoost parameters
         xgb_params = self.model_config['xgboost'].copy()
         base_params = {
@@ -103,11 +114,11 @@ class QuantileModelTrainer:
                 n_estimators=xgb_params.get('n_estimators', 100)
             )
             
-            model.fit(X_train, y_train)
+            model.fit(X_clean, y_clean)
             
             # Store model and predictions
             models[quantile] = model
-            predictions_train[quantile] = model.predict(X_train)
+            predictions_train[quantile] = model.predict(X_clean)
             
             # Store feature importance
             importance_values = model.feature_importances_

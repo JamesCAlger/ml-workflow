@@ -64,4 +64,10 @@ cache/
 *.pkl
 *.joblib
 *.h5
-*.model 
+*.model
+
+# MLflow
+mlruns/
+mlartifacts/
+*.db
+mlflow.db 
