@@ -77,6 +77,9 @@ class TransformationManager:
                     'transform_name': transform_name
                 })
                 
+                # Store inverse mapping for each intermediate transformation step
+                self.inverse_mappings[transformed_column] = column_name
+                
                 # Update current column for next transformation in chain
                 current_column = transformed_column
                 
@@ -86,7 +89,6 @@ class TransformationManager:
             if transformation_chain:
                 final_column = transformation_chain[-1]['to_column']
                 self.column_mappings[column_name] = final_column
-                self.inverse_mappings[final_column] = column_name
                 
                 # Store the transformation chain for complex inverse operations
                 self.transformation_chains = getattr(self, 'transformation_chains', {})
@@ -144,6 +146,71 @@ class TransformationManager:
             return original_column, 'original'
         
         return target_column, 'original'
+    
+    def get_visualization_column_info(self, target_column):
+        """Get detailed information about what columns to use for visualization
+        
+        Returns:
+            dict: Information about columns and transformation complexity
+        """
+        if not self.auto_reverse_for_visualization:
+            return {
+                'target_column': target_column,
+                'actual_column': target_column,
+                'needs_prediction_transform': False,
+                'transform_complexity': 'none'
+            }
+        
+        # Check if this is a chained transformation
+        transformation_chains = getattr(self, 'transformation_chains', {})
+        
+        if target_column in transformation_chains:
+            chain = transformation_chains[target_column]
+            original_column = self.inverse_mappings[target_column]
+            
+            # For chained transformations, we need to be more careful
+            # Check if the chain includes first difference
+            has_first_diff = any(step['transform_name'] == 'first_difference' for step in chain)
+            
+            if has_first_diff:
+                # First difference makes back-transformation complex
+                # For visualization, we should warn and potentially use a different approach
+                return {
+                    'target_column': target_column,
+                    'actual_column': original_column,
+                    'needs_prediction_transform': True,
+                    'transform_complexity': 'complex_chain',
+                    'warning': 'First difference in chain makes visualization back-transformation complex',
+                    'chain_info': chain
+                }
+            else:
+                # Simple chain (e.g., just log transform)
+                return {
+                    'target_column': target_column,
+                    'actual_column': original_column,
+                    'needs_prediction_transform': True,
+                    'transform_complexity': 'simple_chain',
+                    'chain_info': chain
+                }
+        
+        elif target_column in self.inverse_mappings:
+            # Single transformation
+            original_column = self.inverse_mappings[target_column]
+            return {
+                'target_column': target_column,
+                'actual_column': original_column,
+                'needs_prediction_transform': True,
+                'transform_complexity': 'single_transform'
+            }
+        
+        else:
+            # No transformation
+            return {
+                'target_column': target_column,
+                'actual_column': target_column,
+                'needs_prediction_transform': False,
+                'transform_complexity': 'none'
+            }
     
     def get_target_info(self, target_column):
         """Get information about target column transformations"""

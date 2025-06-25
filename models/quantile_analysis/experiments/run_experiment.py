@@ -155,12 +155,18 @@ class ExperimentRunner:
                                       data_config=self.data_config,
                                       transformation_manager=transformation_manager)
         
+        # Get target column for transformation-aware visualization
+        target_name = self.exp_config['target']
+        target_config = self.experiment_config['targets'][target_name]
+        target_column = target_config['column']
+        
         # Create all standard visualizations (predictions are already back-transformed)
         visualizer.create_all_visualizations(
             data_dict['df_full'], 
             evaluation_results, 
             training_results, 
-            save=True
+            save=True,
+            target_column=target_column
         )
         
         print("Visualization completed!")

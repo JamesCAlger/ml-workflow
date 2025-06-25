@@ -14,6 +14,7 @@ class QuantileVisualizer:
         self.output_path = output_path
         self.data_config = data_config
         self.transformation_manager = transformation_manager
+        self.target_column = None  # Will be set during visualization
         
         # Get aggregation covariate column
         if data_config:
@@ -42,6 +43,25 @@ class QuantileVisualizer:
             filepath = os.path.join(self.plots_dir, filename)
             plt.savefig(filepath, dpi=dpi, bbox_inches=bbox_inches)
             print(f"Plot saved: {filepath}")
+    
+    def set_target_column(self, target_column):
+        """Set the target column for transformation-aware visualization"""
+        self.target_column = target_column
+    
+    def get_visualization_info(self, target_column=None):
+        """Get information about how to handle visualization for the current target"""
+        if target_column is None:
+            target_column = self.target_column
+        
+        if not self.transformation_manager or not target_column:
+            return {
+                'actual_column': 'disbursement',  # Default fallback
+                'needs_prediction_transform': False,
+                'transform_complexity': 'none',
+                'warning': None
+            }
+        
+        return self.transformation_manager.get_visualization_column_info(target_column)
     
     def plot_disbursements_by_age(self, df_disbursements, save=True):
         """Plot average disbursement by age and strategy"""
@@ -201,8 +221,31 @@ class QuantileVisualizer:
             print("Warning: Median quantile (0.5) not available for comparison")
             return
         
+        # Get visualization information to handle transformations properly
+        viz_info = self.get_visualization_info()
+        actual_column = viz_info['actual_column']
+        transform_complexity = viz_info['transform_complexity']
+        
+        # Print warning if transformation is complex
+        if 'warning' in viz_info and viz_info['warning']:
+            print(f"Visualization Warning: {viz_info['warning']}")
+            if transform_complexity == 'complex_chain':
+                print("Using transformed scale for both actual and predicted values")
+                actual_column = self.target_column if self.target_column and self.target_column in df_full.columns else 'disbursement'
+        
+        # Check if the actual column exists
+        if actual_column not in df_full.columns:
+            print(f"Warning: Column '{actual_column}' not found in dataframe. Available columns: {list(df_full.columns)}")
+            # Fallback to target column if it exists
+            if self.target_column and self.target_column in df_full.columns:
+                actual_column = self.target_column
+                print(f"Using target column '{actual_column}' for visualization")
+            else:
+                print("Using 'disbursement' as fallback")
+                actual_column = 'disbursement'
+        
         # Calculate actual averages by age and strategy
-        actual_by_age_strategy = df_full.groupby([self.aggregation_col, 'age'])['disbursement'].mean().reset_index()
+        actual_by_age_strategy = df_full.groupby([self.aggregation_col, 'age'])[actual_column].mean().reset_index()
         
         # Add predictions to dataframe and calculate predicted averages
         df_with_preds = df_full.copy()
@@ -218,25 +261,47 @@ class QuantileVisualizer:
         if len(unique_strategies) == 1:
             axes = [axes]
         
+        # Determine labels and formatting based on actual column
+        if actual_column == 'nav':
+            y_label = 'Average NAV'
+            title_prefix = 'NAV'
+            value_formatter = lambda x, p: f'${x/1e6:.1f}M'
+        elif actual_column == 'disbursement':
+            y_label = 'Average Disbursement'
+            title_prefix = 'Disbursements'
+            value_formatter = lambda x, p: f'${x/1e6:.1f}M'
+        elif 'log' in actual_column and 'diff' in actual_column:
+            y_label = f'Average {actual_column.replace("_", " ").title()}'
+            title_prefix = 'Log-Differenced Values'
+            value_formatter = lambda x, p: f'{x:.3f}'
+        elif 'log' in actual_column:
+            y_label = f'Average {actual_column.replace("_", " ").title()}'
+            title_prefix = 'Log-Transformed Values'
+            value_formatter = lambda x, p: f'{x:.2f}'
+        else:
+            y_label = f'Average {actual_column.replace("_", " ").title()}'
+            title_prefix = actual_column.replace("_", " ").title()
+            value_formatter = lambda x, p: f'{x:.2f}'
+        
         for i, strategy in enumerate(unique_strategies):
             # Get data for this strategy
             actual_strategy = actual_by_age_strategy[actual_by_age_strategy[self.aggregation_col] == strategy]
             predicted_strategy = predicted_by_age_strategy[predicted_by_age_strategy[self.aggregation_col] == strategy]
             
             # Plot actual vs predicted
-            axes[i].plot(actual_strategy['age'], actual_strategy['disbursement'], 
+            axes[i].plot(actual_strategy['age'], actual_strategy[actual_column], 
                          'o-', linewidth=2, markersize=6, label='Actual Average', alpha=0.8)
             axes[i].plot(predicted_strategy['age'], predicted_strategy['pred_q50'], 
                          's-', linewidth=2, markersize=6, label='Predicted Average (Q50)', alpha=0.8)
             
             axes[i].set_xlabel('Age (Quarters since first investment)', fontsize=12)
-            axes[i].set_ylabel('Average Disbursement', fontsize=12)
-            axes[i].set_title(f'Predicted vs Actual Average Disbursements by Age - {strategy} {self.aggregation_col.title()}', fontsize=14)
+            axes[i].set_ylabel(y_label, fontsize=12)
+            axes[i].set_title(f'Predicted vs Actual Average {title_prefix} by Age - {strategy} {self.aggregation_col.title()}', fontsize=14)
             axes[i].legend()
             axes[i].grid(True, alpha=0.3)
             
-            # Format y-axis to show values in millions
-            axes[i].yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x/1e6:.1f}M'))
+            # Format y-axis appropriately
+            axes[i].yaxis.set_major_formatter(plt.FuncFormatter(value_formatter))
         
         plt.tight_layout()
         
@@ -319,18 +384,41 @@ class QuantileVisualizer:
                 ax.fill_between(strategy_data['age'], strategy_data['pred_q20'], strategy_data['pred_q80'], 
                                alpha=0.3, color='blue', label='60% Interval (Q20-Q80)')
             
+            # Get visualization info for appropriate actual column
+            viz_info = self.get_visualization_info()
+            actual_column = viz_info['actual_column']
+            if actual_column not in strategy_data.columns:
+                actual_column = 'disbursement'  # Fallback
+            
             # Plot actual values
-            ax.scatter(strategy_data['age'], strategy_data['disbursement'], 
+            ax.scatter(strategy_data['age'], strategy_data[actual_column], 
                       alpha=0.4, s=20, color='red', label='Actual')
             
+            # Determine appropriate labels and formatting
+            if actual_column == 'nav':
+                y_label = 'NAV'
+                value_formatter = lambda x, p: f'${x/1e6:.1f}M'
+            elif actual_column == 'disbursement':
+                y_label = 'Disbursement'
+                value_formatter = lambda x, p: f'${x/1e6:.1f}M'
+            elif 'log' in actual_column and 'diff' in actual_column:
+                y_label = f'{actual_column.replace("_", " ").title()}'
+                value_formatter = lambda x, p: f'{x:.3f}'
+            elif 'log' in actual_column:
+                y_label = f'{actual_column.replace("_", " ").title()}'
+                value_formatter = lambda x, p: f'{x:.2f}'
+            else:
+                y_label = f'{actual_column.replace("_", " ").title()}'
+                value_formatter = lambda x, p: f'{x:.2f}'
+            
             ax.set_xlabel('Age (Quarters)')
-            ax.set_ylabel('Disbursement')
+            ax.set_ylabel(y_label)
             ax.set_title(f'{strategy} - Prediction Intervals', fontsize=12)
             ax.legend(fontsize=8)
             ax.grid(True, alpha=0.3)
             
-            # Format y-axis
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x/1e6:.1f}M'))
+            # Format y-axis appropriately
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(value_formatter))
         
         # Hide unused subplots
         for j in range(len(strategies_for_viz), len(axes)):
@@ -465,9 +553,13 @@ class QuantileVisualizer:
         
         plt.show()
     
-    def create_all_visualizations(self, df_full, evaluation_results, training_results, save=True):
+    def create_all_visualizations(self, df_full, evaluation_results, training_results, save=True, target_column=None):
         """Create all standard visualizations for the analysis"""
         print("Creating all visualizations...")
+        
+        # Set target column for transformation-aware visualization
+        if target_column:
+            self.set_target_column(target_column)
         
         predictions = evaluation_results['predictions']
         
